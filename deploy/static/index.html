@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>데이터 분류 수집기</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f6f8;
+            color: #191f28;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container { max-width: 680px; margin: 0 auto; }
+
+        .header { text-align: center; padding: 40px 0 30px; }
+        .header h1 { font-size: 24px; font-weight: 700; color: #191f28; margin-bottom: 8px; }
+        .subtitle { font-size: 14px; color: #8b95a1; margin-top: 4px; }
+
+        .sync-status {
+            text-align: center; font-size: 12px; color: #8b95a1;
+            margin-bottom: 16px; padding: 6px; border-radius: 8px;
+            background: #f2f4f6;
+        }
+        .sync-status.connected { color: #00c471; background: #e8faf3; }
+        .sync-status.error { color: #f04452; background: #fdebed; }
+</style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>📊 데이터 분류 수집기</h1>
+        <p class="subtitle">분류 박스를 만들고, 데이터를 정리하세요</p>
+    </div>
+
+    <div class="sync-status" id="sync-status">서버 연결 확인 중...</div>
+
+    <!-- 탭 네비게이션 -->
+    <div class="tab-nav">
+        <button class="tab-btn active" data-tab="boxes">박스 목록</button>
+        <button class="tab-btn" data-tab="input">데이터 입력</button>
+        <button class="tab-btn" data-tab="probability">확률 계산</button>
+    </div>
+
+    <!-- 박스 목록 탭 -->
+    <div class="tab-content active" id="tab-boxes">
+        <div class="card">
+            <div class="card-header">
+                <h2>📦 분류 박스</h2>
+                <button class="btn-small" onclick="showNewBoxModal()">+ 새 박스</button>
+            </div>
+            <div id="box-list" class="box-list">
+                <div class="empty-state">아직 박스가 없어요. 새 박스를 만들어보세요!</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 데이터 입력 탭 -->
+    <div class="tab-content" id="tab-input">
+        <div class="card">
+            <h2 style="margin-bottom: 20px;">📝 데이터 입력</h2>
+            <div class="form-group">
+                <label>박스 선택</label>
+                <select id="input-box-select" class="select-input">
+                    <option value="">박스를 선택하세요</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>데이터 값</label>
+                <input type="text" id="input-data" class="text-input" placeholder="값을 입력하세요">
+            </div>
+            <button class="btn-primary" onclick="addData()">추가하기</button>
+        </div>
+    </div>
+
+    <!-- 확률 계산 탭 -->
+    <div class="tab-content" id="tab-probability">
+        <div class="card">
+            <h2 style="margin-bottom: 20px;">🎯 확률 계산</h2>
+            <div class="form-group">
+                <label>박스 선택</label>
+                <select id="prob-box-select" class="select-input" onchange="updateProbBoxData()">
+                    <option value="">박스를 선택하세요</option>
+                </select>
+            </div>
+            <div id="prob-box-data" style="display:none;">
+                <div class="form-group">
+                    <label>확률을 알고 싶은 값</label>
+                    <input type="number" id="prob-target" class="text-input" placeholder="숫자를 입력하세요">
+                </div>
+                <button class="btn-primary" onclick="calculateProbability()">계산하기</button>
+            </div>
+            <div id="prob-result"></div>
+        </div>
+    </div>
+
+    <!-- 박스 상세 모달 -->
+    <div class="modal-overlay" id="modal-overlay" onclick="closeModal()">
+        <div class="modal" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h2 id="modal-title">박스 상세</h2>
+                <button class="btn-close" onclick="closeModal()">✕</button>
+            </div>
+            <div id="modal-body"></div>
+        </div>
+    </div>
+
+    <!-- 새 박스 모달 -->
+    <div class="modal-overlay" id="new-box-modal" onclick="closeNewBoxModal()">
+        <div class="modal" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h2>새 박스 만들기</h2>
+                <button class="btn-close" onclick="closeNewBoxModal()">✕</button>
+            </div>
+            <div class="modal-body-content">
+                <div class="form-group">
+                    <label>박스 이름</label>
+                    <input type="text" id="new-box-name" class="text-input" placeholder="이름을 입력하세요" maxlength="31">
+                </div>
+                <button class="btn-primary" onclick="createBox()">만들기</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 토스트 메시지 -->
+    <div class="toast" id="toast"></div>
+</div>
+
+<style>
+    .tab-nav {
+        display: flex; gap: 4px; background: #fff; border-radius: 16px;
+        padding: 4px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    .tab-btn {
+        flex: 1; padding: 12px 16px; border: none; border-radius: 12px;
+        background: transparent; font-size: 14px; font-weight: 600;
+        color: #8b95a1; cursor: pointer; transition: all 0.2s;
+    }
+    .tab-btn.active { background: #3182f6; color: #fff; }
+    .tab-btn:hover:not(.active) { background: #f2f4f6; color: #191f28; }
+
+    .card {
+        background: #fff; border-radius: 20px; padding: 24px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04); margin-bottom: 16px;
+    }
+    .card-header {
+        display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;
+    }
+    .card-header h2 { font-size: 18px; font-weight: 700; }
+
+    .btn-primary {
+        width: 100%; padding: 14px 24px; background: #3182f6; color: #fff;
+        border: none; border-radius: 12px; font-size: 15px; font-weight: 600;
+        cursor: pointer; transition: background 0.2s; margin-top: 12px;
+    }
+    .btn-primary:hover { background: #1b64da; }
+    .btn-primary:active { transform: scale(0.98); }
+
+    .btn-small {
+        padding: 8px 16px; background: #f2f4f6; color: #3182f6; border: none;
+        border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
+        transition: all 0.2s;
+    }
+    .btn-small:hover { background: #e8f3ff; }
+
+    .btn-danger {
+        padding: 6px 12px; background: #fff; color: #f04452;
+        border: 1px solid #fdebed; border-radius: 8px; font-size: 12px;
+        font-weight: 500; cursor: pointer; transition: all 0.2s;
+    }
+    .btn-danger:hover { background: #fdebed; }
+
+    .btn-close {
+        background: none; border: none; font-size: 20px; color: #8b95a1;
+        cursor: pointer; padding: 4px 8px; border-radius: 8px;
+    }
+    .btn-close:hover { background: #f2f4f6; }
+</style>
+
+<style>
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-size: 13px; font-weight: 600; color: #4e5968; margin-bottom: 8px; }
+
+    .text-input, .select-input {
+        width: 100%; padding: 14px 16px; border: 1px solid #e5e8eb;
+        border-radius: 12px; font-size: 15px; color: #191f28;
+        background: #f9fafb; transition: all 0.2s; outline: none;
+    }
+    .text-input:focus, .select-input:focus {
+        border-color: #3182f6; background: #fff;
+        box-shadow: 0 0 0 3px rgba(49,130,246,0.1);
+    }
+    .select-input {
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238b95a1' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat; background-position: right 16px center; padding-right: 40px;
+    }
+
+    .box-list { display: flex; flex-direction: column; gap: 8px; }
+    .box-item {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 16px; background: #f9fafb; border-radius: 12px;
+        cursor: pointer; transition: all 0.2s;
+    }
+    .box-item:hover { background: #f2f4f6; transform: translateY(-1px); }
+    .box-item-left { display: flex; align-items: center; gap: 12px; }
+    .box-icon {
+        width: 40px; height: 40px; background: #e8f3ff; border-radius: 10px;
+        display: flex; align-items: center; justify-content: center; font-size: 18px;
+    }
+    .box-name { font-size: 15px; font-weight: 600; color: #191f28; }
+    .box-count { font-size: 13px; color: #8b95a1; margin-top: 2px; }
+    .box-arrow { color: #d1d6db; font-size: 18px; }
+
+    .empty-state { text-align: center; padding: 40px 20px; color: #8b95a1; font-size: 14px; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    .modal-overlay {
+        display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.4); z-index: 1000;
+        align-items: center; justify-content: center; padding: 20px;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal {
+        background: #fff; border-radius: 20px; width: 100%; max-width: 500px;
+        max-height: 80vh; overflow-y: auto; padding: 24px; animation: slideUp 0.3s ease;
+    }
+    @keyframes slideUp {
+        from { transform: translateY(20px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+    }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .modal-header h2 { font-size: 18px; font-weight: 700; }
+
+    .data-table { width: 100%; border-collapse: collapse; }
+    .data-table th { text-align: left; font-size: 12px; font-weight: 600; color: #8b95a1; padding: 8px 12px; border-bottom: 1px solid #f2f4f6; }
+    .data-table td { font-size: 14px; padding: 12px; border-bottom: 1px solid #f9fafb; color: #333d4b; }
+    .data-table tr:hover td { background: #f9fafb; }
+</style>
+
+<style>
+    .prob-card {
+        background: linear-gradient(135deg, #3182f6, #1b64da); border-radius: 16px;
+        padding: 28px; color: #fff; text-align: center; margin-top: 20px;
+    }
+    .prob-card .prob-label { font-size: 14px; opacity: 0.8; margin-bottom: 8px; }
+    .prob-card .prob-value { font-size: 48px; font-weight: 700; margin-bottom: 8px; }
+    .prob-card .prob-detail { font-size: 13px; opacity: 0.7; }
+
+    .dist-section { margin-top: 20px; }
+    .dist-section h3 { font-size: 15px; font-weight: 600; margin-bottom: 12px; color: #333d4b; }
+    .dist-item { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+    .dist-label { font-size: 14px; font-weight: 600; min-width: 50px; text-align: right; color: #333d4b; }
+    .dist-bar-bg { flex: 1; height: 28px; background: #f2f4f6; border-radius: 8px; overflow: hidden; }
+    .dist-bar-fill {
+        height: 100%; background: linear-gradient(90deg, #3182f6, #74b3ff);
+        border-radius: 8px; transition: width 0.6s ease; min-width: 2px;
+    }
+    .dist-bar-fill.highlight { background: linear-gradient(90deg, #f04452, #ff6b6b); }
+    .dist-pct { font-size: 13px; font-weight: 600; color: #4e5968; min-width: 70px; }
+
+    .toast {
+        position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(100px);
+        background: #191f28; color: #fff; padding: 14px 24px; border-radius: 12px;
+        font-size: 14px; font-weight: 500; z-index: 2000; opacity: 0; transition: all 0.3s ease;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+
+<script>
+// ─────────────────────────────────────────────
+// 서버 API 기반 데이터 저장소
+// ─────────────────────────────────────────────
+
+const API_BASE = window.location.origin;
+let cachedData = {};
+
+async function loadData() {
+    try {
+        const res = await fetch(API_BASE + '/api/boxes');
+        if (res.ok) {
+            cachedData = await res.json();
+            updateSyncStatus(true);
+        }
+    } catch (e) {
+        updateSyncStatus(false);
+    }
+    return cachedData;
+}
+
+async function saveData(data) {
+    cachedData = data;
+    try {
+        await fetch(API_BASE + '/api/boxes', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        updateSyncStatus(true);
+    } catch (e) {
+        updateSyncStatus(false);
+    }
+}
+
+function updateSyncStatus(connected) {
+    const el = document.getElementById('sync-status');
+    if (connected) {
+        el.textContent = '✓ 서버 연결됨 · 모든 기기에서 동기화';
+        el.className = 'sync-status connected';
+    } else {
+        el.textContent = '✗ 서버 연결 실패 · 오프라인 모드';
+        el.className = 'sync-status error';
+    }
+}
+
+// ─────────────────────────────────────────────
+// 탭 전환
+// ─────────────────────────────────────────────
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+        if (btn.dataset.tab === 'input' || btn.dataset.tab === 'probability') {
+            await updateSelectOptions();
+        }
+    });
+});
+
+// ─────────────────────────────────────────────
+// 토스트
+// ─────────────────────────────────────────────
+
+function showToast(message) {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 2500);
+}
+</script>
+
+<script>
+// ─────────────────────────────────────────────
+// 박스 목록 렌더링
+// ─────────────────────────────────────────────
+
+async function renderBoxList() {
+    const data = await loadData();
+    const boxList = document.getElementById('box-list');
+    const boxNames = Object.keys(data);
+
+    if (boxNames.length === 0) {
+        boxList.innerHTML = '<div class="empty-state">아직 박스가 없어요. 새 박스를 만들어보세요!</div>';
+        return;
+    }
+
+    boxList.innerHTML = boxNames.map(name => {
+        const count = data[name].length;
+        return `
+            <div class="box-item" onclick="openBoxDetail('${name}')">
+                <div class="box-item-left">
+                    <div class="box-icon">📦</div>
+                    <div>
+                        <div class="box-name">${name}</div>
+                        <div class="box-count">데이터 ${count}건</div>
+                    </div>
+                </div>
+                <span class="box-arrow">›</span>
+            </div>
+        `;
+    }).join('');
+}
+
+// ─────────────────────────────────────────────
+// 셀렉트 옵션
+// ─────────────────────────────────────────────
+
+async function updateSelectOptions() {
+    const data = await loadData();
+    const boxNames = Object.keys(data);
+    const options = '<option value="">박스를 선택하세요</option>' +
+        boxNames.map(name => `<option value="${name}">${name} (${data[name].length}건)</option>`).join('');
+
+    document.getElementById('input-box-select').innerHTML = options;
+    document.getElementById('prob-box-select').innerHTML = options;
+}
+
+// ─────────────────────────────────────────────
+// 새 박스
+// ─────────────────────────────────────────────
+
+function showNewBoxModal() {
+    document.getElementById('new-box-modal').classList.add('show');
+    document.getElementById('new-box-name').value = '';
+    setTimeout(() => document.getElementById('new-box-name').focus(), 100);
+}
+
+function closeNewBoxModal() {
+    document.getElementById('new-box-modal').classList.remove('show');
+}
+
+async function createBox() {
+    const name = document.getElementById('new-box-name').value.trim();
+    if (!name) { showToast('박스 이름을 입력해주세요'); return; }
+    if (name.length > 31) { showToast('박스 이름은 31자 이내로 입력해주세요'); return; }
+
+    const data = await loadData();
+    if (data[name]) { showToast('이미 존재하는 박스 이름이에요'); return; }
+
+    data[name] = [];
+    await saveData(data);
+    closeNewBoxModal();
+    await renderBoxList();
+    showToast(`'${name}' 박스가 만들어졌어요`);
+}
+
+// ─────────────────────────────────────────────
+// 데이터 입력
+// ─────────────────────────────────────────────
+
+async function addData() {
+    const boxName = document.getElementById('input-box-select').value;
+    const value = document.getElementById('input-data').value.trim();
+
+    if (!boxName) { showToast('박스를 선택해주세요'); return; }
+    if (!value) { showToast('데이터를 입력해주세요'); return; }
+
+    const data = await loadData();
+    if (!data[boxName]) data[boxName] = [];
+
+    const now = new Date().toLocaleString('ko-KR', {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+
+    data[boxName].push({ value: value, time: now });
+    await saveData(data);
+
+    document.getElementById('input-data').value = '';
+    document.getElementById('input-data').focus();
+    await renderBoxList();
+    await updateSelectOptions();
+    showToast(`'${boxName}'에 데이터 추가 완료`);
+}
+
+document.getElementById('input-data').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') addData();
+});
+document.getElementById('new-box-name').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') createBox();
+});
+</script>
+
+<script>
+// ─────────────────────────────────────────────
+// 박스 상세 모달
+// ─────────────────────────────────────────────
+
+async function openBoxDetail(boxName) {
+    const data = await loadData();
+    const items = data[boxName] || [];
+
+    document.getElementById('modal-title').textContent = '📦 ' + boxName;
+
+    let html = '';
+    if (items.length === 0) {
+        html = '<div class="empty-state">데이터가 없어요</div>';
+    } else {
+        html = `<table class="data-table">
+            <thead><tr><th>#</th><th>데이터</th><th>입력 시간</th><th></th></tr></thead>
+            <tbody>`;
+        items.forEach((item, idx) => {
+            html += `<tr>
+                <td>${idx + 1}</td>
+                <td>${item.value}</td>
+                <td>${item.time}</td>
+                <td><button class="btn-danger" onclick="deleteItem('${boxName}', ${idx})">삭제</button></td>
+            </tr>`;
+        });
+        html += `</tbody></table>`;
+    }
+
+    html += `<div style="margin-top:20px; text-align:right;">
+        <button class="btn-danger" style="padding:10px 20px; font-size:14px;" onclick="deleteBox('${boxName}')">박스 삭제</button>
+    </div>`;
+
+    document.getElementById('modal-body').innerHTML = html;
+    document.getElementById('modal-overlay').classList.add('show');
+}
+
+function closeModal() {
+    document.getElementById('modal-overlay').classList.remove('show');
+}
+
+async function deleteItem(boxName, idx) {
+    const data = await loadData();
+    if (data[boxName]) {
+        data[boxName].splice(idx, 1);
+        await saveData(data);
+        await renderBoxList();
+        await openBoxDetail(boxName);
+        showToast('데이터가 삭제되었어요');
+    }
+}
+
+async function deleteBox(boxName) {
+    if (!confirm(`'${boxName}' 박스를 정말 삭제할까요?`)) return;
+    const data = await loadData();
+    delete data[boxName];
+    await saveData(data);
+    closeModal();
+    await renderBoxList();
+    await updateSelectOptions();
+    showToast(`'${boxName}' 박스가 삭제되었어요`);
+}
+
+// ─────────────────────────────────────────────
+// 확률 계산
+// ─────────────────────────────────────────────
+
+function updateProbBoxData() {
+    const boxName = document.getElementById('prob-box-select').value;
+    const section = document.getElementById('prob-box-data');
+    const resultDiv = document.getElementById('prob-result');
+    if (boxName) { section.style.display = 'block'; resultDiv.innerHTML = ''; }
+    else { section.style.display = 'none'; resultDiv.innerHTML = ''; }
+}
+
+async function calculateProbability() {
+    const boxName = document.getElementById('prob-box-select').value;
+    const targetInput = document.getElementById('prob-target').value.trim();
+
+    if (!boxName) { showToast('박스를 선택해주세요'); return; }
+    if (!targetInput) { showToast('값을 입력해주세요'); return; }
+
+    const targetValue = parseFloat(targetInput);
+    if (isNaN(targetValue)) { showToast('숫자를 입력해주세요'); return; }
+
+    const data = await loadData();
+    const items = data[boxName] || [];
+
+    const numericValues = [];
+    items.forEach(item => {
+        const num = parseFloat(item.value);
+        if (!isNaN(num)) numericValues.push(num);
+    });
+
+    if (numericValues.length === 0) { showToast('이 박스에 숫자 데이터가 없어요'); return; }
+
+    const total = numericValues.length;
+    const matchCount = numericValues.filter(v => v === targetValue).length;
+    const probability = ((matchCount / total) * 100).toFixed(1);
+
+    const distribution = {};
+    numericValues.forEach(v => { distribution[v] = (distribution[v] || 0) + 1; });
+
+    let resultHtml = `
+        <div class="prob-card">
+            <div class="prob-label">${boxName}에서 ${targetValue}이(가) 나올 확률</div>
+            <div class="prob-value">${probability}%</div>
+            <div class="prob-detail">전체 ${total}건 중 ${matchCount}건</div>
+        </div>
+        <div class="dist-section"><h3>📊 전체 분포</h3>`;
+
+    const sortedKeys = Object.keys(distribution).sort((a, b) => parseFloat(a) - parseFloat(b));
+    sortedKeys.forEach(key => {
+        const count = distribution[key];
+        const pct = ((count / total) * 100).toFixed(1);
+        const isTarget = parseFloat(key) === targetValue;
+        const barClass = isTarget ? 'dist-bar-fill highlight' : 'dist-bar-fill';
+        resultHtml += `
+            <div class="dist-item">
+                <span class="dist-label">${key}</span>
+                <div class="dist-bar-bg"><div class="${barClass}" style="width: ${pct}%"></div></div>
+                <span class="dist-pct">${pct}% (${count}건)</span>
+            </div>`;
+    });
+
+    resultHtml += '</div>';
+    document.getElementById('prob-result').innerHTML = resultHtml;
+}
+
+// ─────────────────────────────────────────────
+// 초기화 + 자동 새로고침 (5초마다 동기화)
+// ─────────────────────────────────────────────
+
+renderBoxList();
+setInterval(renderBoxList, 5000);
+</script>
+</body>
+</html>
